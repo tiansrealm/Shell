@@ -44,6 +44,7 @@ void
 runcmd(struct cmd *cmd)
 {
   int p[2], r;
+  //printf("running cmd\n");
   struct execcmd *ecmd;
   struct pipecmd *pcmd;
   struct redircmd *rcmd;
@@ -71,14 +72,15 @@ runcmd(struct cmd *cmd)
     //fprintf(stderr, "redir not implemented\n");
     // Your code here ...
     //open file and link to standard in/out
-    if(rcmd->fd = open(rcmd->file, rcmd->mode, 0600) < 0){  
+    
+    if((rcmd->fd = open(rcmd->file, rcmd->mode, 0600)) < 0){  
       fprintf(stderr, "open %s failed\n", rcmd->file);
       exit(-1);
     }
     if(rcmd->type == '<') {
-      dup2(0, rcmd->fd);
+      dup2(rcmd->fd, 0);
     }else {
-      dup2(1, rcmd->fd);
+      dup2(rcmd->fd, 1);
     }
     runcmd(rcmd->cmd);
     close(rcmd->fd);
@@ -86,8 +88,37 @@ runcmd(struct cmd *cmd)
 
   case '|':
     pcmd = (struct pipecmd*)cmd;
-    fprintf(stderr, "pipe not implemented\n");
+    //fprintf(stderr, "pipe not implemented\n");
     // Your code here ...
+    int pipefd[2];
+    if(pipe(pipefd) < 0){
+      fprintf(stderr, "pipe failed\n");
+      exit(-1);
+    }
+
+    pid_t pid;
+    pid = fork();
+    if (pid == -1){
+      fprintf(stderr, "fork failed\n");
+      exit(-1);
+    }else if(pid == 0){
+      //child will write to  pipe
+      close(pipefd[0]); //close input
+      dup2(pipefd[1], 1); //set output
+      runcmd(pcmd->left);
+      close(pipefd[1]);  
+    }else{
+      //parent will wait for child then read from pipe
+      close(pipefd[1]); //close output
+      dup2(pipefd[0], 0); //set input 
+      /*
+      if(wait(NULL) == -1){   //wait for child
+        fprintf(stderr, "wait failed\n");
+        exit(-1);
+      }*/
+      runcmd(pcmd->right);
+      close(pipefd[0]);
+    }
     break;
   }    
   exit(0);
